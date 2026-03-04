@@ -36,6 +36,17 @@ describe('captureStartupFailureSchema', () => {
 
     expect(value.phase).toBe('install');
   });
+
+  it('accepts playwright preflight phase', () => {
+    const value = captureStartupFailureSchema.parse({
+      phase: 'playwright_preflight',
+      message: 'missing playwright browser',
+      command: 'npx playwright install chromium',
+      attempt: 1,
+    });
+
+    expect(value.phase).toBe('playwright_preflight');
+  });
 });
 
 describe('getUnsafeRecoveryCommandReason', () => {

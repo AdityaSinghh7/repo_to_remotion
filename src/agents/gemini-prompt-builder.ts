@@ -1,4 +1,6 @@
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { Agent } from '@mastra/core/agent';
+import { env } from '../config/env.js';
 import { remotionPromptOutputSchema, type RemotionPromptOutput } from '../types/contracts.js';
 import { AppError } from '../utils/app-error.js';
 import { extractJsonObject } from '../utils/json.js';
@@ -53,10 +55,15 @@ export class GeminiPromptBuilder {
   private readonly agent: Agent;
 
   constructor() {
+    const google = createGoogleGenerativeAI({
+      apiKey: env.googleApiKey,
+    });
+
     this.agent = new Agent({
+      id: 'remotion-prompt-builder',
       name: 'Remotion Prompt Builder',
       instructions: SYSTEM_INSTRUCTIONS,
-      model: 'google/gemini-3.1-pro-preview' as never,
+      model: google(env.geminiModel),
     });
   }
 

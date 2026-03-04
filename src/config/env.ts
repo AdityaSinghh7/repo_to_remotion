@@ -7,4 +7,5 @@ export const env = {
   codexTimeoutMs: Number(process.env.CODEX_TIMEOUT_MS ?? 10 * 60 * 1000),
   stepTimeoutMs: Number(process.env.STEP_TIMEOUT_MS ?? 15 * 60 * 1000),
   googleApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '',
+  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.1-pro-preview',
 };

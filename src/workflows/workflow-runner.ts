@@ -55,16 +55,10 @@ export class WorkflowRunner {
 
   constructor(
     private readonly workflow: {
-      createRun: () => {
+      createRun: () => Promise<{
         start: (input: { inputData: StartInput }) => Promise<{
           status: 'success' | 'failed' | 'suspended' | 'tripwire' | 'paused';
-          error?: Error;
-        }>;
-      };
-      createRunAsync?: () => Promise<{
-        start: (input: { inputData: StartInput }) => Promise<{
-          status: 'success' | 'failed' | 'suspended' | 'tripwire' | 'paused';
-          error?: Error;
+          error?: unknown;
         }>;
       }>;
     },
@@ -130,12 +124,10 @@ export class WorkflowRunner {
       jobId: input.jobId,
     });
 
-    const run = this.workflow.createRunAsync
-      ? await this.workflow.createRunAsync()
-      : this.workflow.createRun();
+    const run = await this.workflow.createRun();
     log('debug', 'Workflow run instance created', {
       jobId: input.jobId,
-      mode: this.workflow.createRunAsync ? 'createRunAsync' : 'createRun',
+      mode: 'createRun',
     });
 
     const result = await run.start({
@@ -152,7 +144,11 @@ export class WorkflowRunner {
     }
 
     if (result.status === 'failed') {
-      throw result.error ?? new Error('Workflow returned failed result status');
+      if (result.error instanceof Error) {
+        throw result.error;
+      }
+
+      throw new Error('Workflow returned failed result status');
     }
 
     throw new Error(`Workflow ended in unsupported status: ${result.status}`);

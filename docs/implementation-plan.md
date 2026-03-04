@@ -4,6 +4,8 @@
 
 ## Phase 1.1 Startup Recovery (Implemented)
 
+## Phase 1.2 AI SDK 5 + Playwright Preflight (Implemented)
+
 ## 1. Objective
 Deliver a runnable Mastra workflow that accepts a public GitHub repo URL and produces either:
 1. deterministic early stop (`stopped_no_frontend`) when no frontend is found, or
@@ -14,9 +16,10 @@ Deliver a runnable Mastra workflow that accepts a public GitHub repo URL and pro
 - Public GitHub repositories only.
 - Asynchronous workflow execution.
 - Deterministic validation + clone + frontend gate.
+- AI SDK 5-compatible Mastra model runtime.
 - Codex CLI (`gpt-5.3-codex`) for repository analysis and code generation.
 - One Gemini call (`google/gemini-3.1-pro-preview`) for remotion prompt synthesis.
-- Playwright screenshot capture with Codex-driven startup recovery retries.
+- Playwright screenshot capture with automatic global Chromium preflight and Codex-driven startup recovery retries.
 - Remotion project generation and MP4 rendering.
 - Step-level status tracking and artifact reporting.
 
@@ -47,7 +50,7 @@ Branch behavior:
 ## 4. Model and Tooling Decisions
 - Codex CLI model: `gpt-5.3-codex`.
 - Codex execution mode: fresh non-interactive `codex exec` per task.
-- Internal LLM model: `google/gemini-3.1-pro-preview` via Mastra Agent.
+- Internal LLM model: `GEMINI_MODEL` env, default `gemini-3.1-pro-preview`, via typed `@ai-sdk/google` model in Mastra Agent.
 - Remotion guidance source: pinned local snapshot at `docs/reference/remotion-pinned.md`.
 
 ## 5. Deterministic Workspace Layout
@@ -90,3 +93,12 @@ This repository now contains a runnable Phase 1 framework implementation under `
 4. retry up to 3 recovery retries (4 total attempts).
 - Startup/capture failures no longer continue with placeholder screenshots.
 - On exhaustion, terminal error remains `FRONTEND_START_FAILED` with attempt diagnostics in `errorDetail`.
+
+## 10. Phase 1.2 Playwright Preflight Semantics
+- Before capture attempts begin, a global Playwright Chromium preflight runs.
+- If browser executable is missing, service runs `npx playwright install chromium`.
+- Preflight install sanitizes env by removing:
+  - `npm_config_prefix`
+  - `PLAYWRIGHT_BROWSERS_PATH` when set to `0`
+- Concurrent jobs share a process-wide install lock to avoid duplicate installs.
+- Preflight failures surface as `FRONTEND_START_FAILED` with failure phase `playwright_preflight`.

@@ -33,8 +33,18 @@ npm run test:endpoint -- --repo-url https://github.com/psf/requests --start-serv
 ## Environment
 See `.env.example`.
 
+Key settings:
+- `GOOGLE_GENERATIVE_AI_API_KEY`: API key used by Gemini prompt builder.
+- `GEMINI_MODEL`: Gemini model id (default: `gemini-3.1-pro-preview`).
+
 For detailed server logs during workflow runs, set:
 
 ```bash
 LOG_LEVEL=debug
 ```
+
+## Playwright Browser Preflight
+Before screenshot capture, the service now performs a global Chromium preflight:
+- checks for a usable Playwright Chromium executable,
+- auto-runs `npx playwright install chromium` when missing,
+- sanitizes install env by unsetting `npm_config_prefix` and `PLAYWRIGHT_BROWSERS_PATH=0`.

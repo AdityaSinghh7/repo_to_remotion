@@ -157,3 +157,10 @@ Step statuses:
   - `attempts[]` with attempt number, commands used, fix commands applied, and structured failure phase/details
   - `finalFailure`
 - Recovery retry budget: initial attempt + up to 3 recovery retries.
+- Failure `phase` values currently include:
+  - `playwright_preflight`
+  - `install`
+  - `start_process`
+  - `readiness_probe`
+  - `screenshot_capture`
+  - `recovery_fix`

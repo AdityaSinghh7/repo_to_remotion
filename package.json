@@ -15,12 +15,14 @@
     "test:endpoint": "tsx scripts/test-endpoint.ts"
   },
   "dependencies": {
-    "@mastra/core": "^0.10.2",
+    "@ai-sdk/google": "^3.0.37",
+    "@mastra/core": "^1.8.0",
+    "ai": "^5.0.144",
+    "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "nanoid": "^5.1.5",
     "playwright": "^1.52.0",
-    "zod": "^3.24.1",
-    "dotenv": "^16.4.7"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

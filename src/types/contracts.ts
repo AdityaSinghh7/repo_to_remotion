@@ -126,6 +126,7 @@ export const capturePlanSchema = z.object({
 export type CapturePlan = z.infer<typeof capturePlanSchema>;
 
 export const captureFailurePhaseSchema = z.enum([
+  'playwright_preflight',
   'install',
   'start_process',
   'readiness_probe',

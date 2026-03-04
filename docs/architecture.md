@@ -17,7 +17,7 @@ flowchart LR
     E --> H[Codex Frontend Gate]
     H -->|false| I[No Frontend Stop]
     H -->|true| J[Codex Purpose + Demo + Capture Plan]
-    J --> K[Playwright Capture]
+    J --> K[Playwright Preflight + Capture]
     K --> L[Gemini Prompt Build]
     L --> M[Codex Remotion Codegen]
     M --> N[Remotion Render]
@@ -30,7 +30,7 @@ flowchart LR
 - Workflow (`src/workflows/repo-to-remotion-workflow.ts`): deterministic step graph and branch handling.
 - Ingestion (`src/ingestion`): GitHub metadata validation and shallow clone.
 - Codex Adapter (`src/analysis`): fresh `codex exec` tasks for structured and markdown outputs.
-- Capture (`src/capture`): command execution + readiness checks + Playwright screenshots + Codex auto-fix retries (max 3 recovery retries).
+- Capture (`src/capture`): Playwright Chromium preflight + command execution + readiness checks + screenshots + Codex auto-fix retries (max 3 recovery retries).
 - Gemini Builder (`src/agents/gemini-prompt-builder.ts`): one internal prompt synthesis call.
 - Remotion (`src/remotion`): project materialization and MP4 render.
 
@@ -49,6 +49,11 @@ flowchart LR
 - Terminal report written to deterministic path.
 - Artifact paths recorded in API-visible manifest.
 - Capture step logs include retry-cycle events:
+  - `playwright_preflight_started`
+  - `playwright_preflight_browser_present`
+  - `playwright_preflight_install_started`
+  - `playwright_preflight_install_completed`
+  - `playwright_preflight_waiting_for_install`
   - `capture_attempt_started`
   - `capture_attempt_failed`
   - `capture_recovery_plan_received`

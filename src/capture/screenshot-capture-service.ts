@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { chromium } from 'playwright';
@@ -21,7 +22,11 @@ const MAX_ATTEMPTS = 1 + MAX_RECOVERY_RETRIES;
 const READINESS_TIMEOUT_MS = 120_000;
 const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 const FIX_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
+const PLAYWRIGHT_INSTALL_TIMEOUT_MS = 5 * 60 * 1000;
 const OUTPUT_TAIL_LIMIT = 12_000;
+const PLAYWRIGHT_INSTALL_COMMAND = 'npx playwright install chromium';
+
+let playwrightInstallPromise: Promise<void> | null = null;
 
 export const DETERMINISTIC_SCREENSHOT_NAMES = [
   '01-landing.png',
@@ -203,6 +208,169 @@ export const getUnsafeRecoveryCommandReason = (
   return null;
 };
 
+type PlaywrightPreflightOptions = {
+  jobId: string;
+  repoPath: string;
+  attempt: number;
+  accessFn?: (targetPath: string) => Promise<void>;
+  resolveExecutablePath?: () => string;
+  runCommandFn?: typeof runCommand;
+  baseEnv?: NodeJS.ProcessEnv;
+};
+
+export const resetPlaywrightPreflightStateForTests = (): void => {
+  playwrightInstallPromise = null;
+};
+
+export const createPlaywrightInstallEnv = (baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+  const nextEnv: NodeJS.ProcessEnv = { ...baseEnv };
+  delete nextEnv.npm_config_prefix;
+
+  if (nextEnv.PLAYWRIGHT_BROWSERS_PATH === '0') {
+    delete nextEnv.PLAYWRIGHT_BROWSERS_PATH;
+  }
+
+  return nextEnv;
+};
+
+const createPlaywrightPreflightFailure = (input: {
+  attempt: number;
+  message: string;
+  command?: string | null;
+  exitCode?: number | null;
+  stdout?: string | null;
+  stderr?: string | null;
+}): CaptureStartupFailure =>
+  createCaptureFailure({
+    phase: 'playwright_preflight',
+    attempt: input.attempt,
+    message: input.message,
+    command: input.command ?? PLAYWRIGHT_INSTALL_COMMAND,
+    exitCode: input.exitCode,
+    stdout: input.stdout,
+    stderr: input.stderr,
+  });
+
+const asPlaywrightPreflightError = (input: {
+  error: unknown;
+  attempt: number;
+  command?: string | null;
+}): AppError => {
+  const parsed = parseFailureFromError(input.error);
+  if (parsed) {
+    return new AppError('FRONTEND_START_FAILED', parsed.failure.message, parsed.failure);
+  }
+
+  const appError = asAppError(input.error);
+  const detail =
+    appError.detail && typeof appError.detail === 'object'
+      ? (appError.detail as Record<string, unknown>)
+      : null;
+
+  const failure = createPlaywrightPreflightFailure({
+    attempt: input.attempt,
+    message: appError.message,
+    command: input.command,
+    exitCode: typeof detail?.exitCode === 'number' ? detail.exitCode : null,
+    stdout: typeof detail?.stdout === 'string' ? detail.stdout : null,
+    stderr: typeof detail?.stderr === 'string' ? detail.stderr : null,
+  });
+
+  return new AppError('FRONTEND_START_FAILED', failure.message, failure);
+};
+
+export const ensureGlobalPlaywrightChromium = async (
+  input: PlaywrightPreflightOptions,
+): Promise<void> => {
+  const accessFn = input.accessFn ?? (async (targetPath: string) => fs.access(targetPath));
+  const resolveExecutablePath = input.resolveExecutablePath ?? (() => chromium.executablePath());
+  const runCommandFn = input.runCommandFn ?? runCommand;
+
+  log('info', 'playwright_preflight_started', {
+    jobId: input.jobId,
+    attempt: input.attempt,
+  });
+
+  const executablePath = resolveExecutablePath();
+  if (executablePath) {
+    try {
+      await accessFn(executablePath);
+      log('info', 'playwright_preflight_browser_present', {
+        jobId: input.jobId,
+        attempt: input.attempt,
+        executablePath,
+      });
+      return;
+    } catch {
+      // Browser binary is missing; install globally.
+    }
+  }
+
+  if (!playwrightInstallPromise) {
+    playwrightInstallPromise = (async () => {
+      log('info', 'playwright_preflight_install_started', {
+        jobId: input.jobId,
+        attempt: input.attempt,
+        command: PLAYWRIGHT_INSTALL_COMMAND,
+      });
+
+      const install = await runCommandFn('npx', ['playwright', 'install', 'chromium'], {
+        cwd: input.repoPath,
+        timeoutMs: PLAYWRIGHT_INSTALL_TIMEOUT_MS,
+        env: createPlaywrightInstallEnv(input.baseEnv ?? process.env),
+      });
+
+      if (install.exitCode !== 0) {
+        const failure = createPlaywrightPreflightFailure({
+          attempt: input.attempt,
+          message: 'Playwright chromium install command failed',
+          command: PLAYWRIGHT_INSTALL_COMMAND,
+          exitCode: install.exitCode,
+          stdout: install.stdout,
+          stderr: install.stderr,
+        });
+        throw new AppError('FRONTEND_START_FAILED', failure.message, failure);
+      }
+
+      const resolvedPath = resolveExecutablePath();
+      if (resolvedPath) {
+        try {
+          await accessFn(resolvedPath);
+        } catch {
+          const failure = createPlaywrightPreflightFailure({
+            attempt: input.attempt,
+            message: 'Playwright chromium executable is still missing after install',
+            command: PLAYWRIGHT_INSTALL_COMMAND,
+          });
+          throw new AppError('FRONTEND_START_FAILED', failure.message, failure);
+        }
+      }
+
+      log('info', 'playwright_preflight_install_completed', {
+        jobId: input.jobId,
+        attempt: input.attempt,
+      });
+    })()
+      .catch((error) => {
+        throw asPlaywrightPreflightError({
+          error,
+          attempt: input.attempt,
+          command: PLAYWRIGHT_INSTALL_COMMAND,
+        });
+      })
+      .finally(() => {
+        playwrightInstallPromise = null;
+      });
+  } else {
+    log('info', 'playwright_preflight_waiting_for_install', {
+      jobId: input.jobId,
+      attempt: input.attempt,
+    });
+  }
+
+  await playwrightInstallPromise;
+};
+
 export class ScreenshotCaptureService {
   constructor(private readonly codexAnalysisService: CodexAnalysisService) {}
 
@@ -228,6 +396,12 @@ export class ScreenshotCaptureService {
       routes: input.capturePlan.screenshotRoutes,
       hasInstallCommand: Boolean(installCommand),
       screenshotDir,
+    });
+
+    await ensureGlobalPlaywrightChromium({
+      jobId: input.jobId,
+      repoPath: input.repoPath,
+      attempt: 1,
     });
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {

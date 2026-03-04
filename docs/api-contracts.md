@@ -150,3 +150,10 @@ Step statuses:
 - `RENDER_FAILED`
 - `JOB_NOT_FOUND`
 - `INTERNAL_ERROR`
+
+## 8. Startup Recovery Error Detail
+- For `planRunAndCaptureWithCodex` failures, `errorDetail` includes structured retry diagnostics:
+  - `attemptCount`
+  - `attempts[]` with attempt number, commands used, fix commands applied, and structured failure phase/details
+  - `finalFailure`
+- Recovery retry budget: initial attempt + up to 3 recovery retries.

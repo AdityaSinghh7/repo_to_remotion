@@ -4,6 +4,7 @@ import type { CloneResult, GithubRepoMetadata } from '../types/contracts.js';
 import { AppError } from '../utils/app-error.js';
 import { runCommand } from '../utils/command-runner.js';
 import { ensureDir } from '../utils/fs.js';
+import { log } from '../utils/logger.js';
 import { getClonedRepoPath, getJobWorkspaceRoot } from '../utils/paths.js';
 
 const sanitizeRepoDirName = (owner: string, repo: string): string =>
@@ -13,12 +14,20 @@ export const cloneRepoShallow = async (
   jobId: string,
   metadata: GithubRepoMetadata,
 ): Promise<CloneResult> => {
+  const startedAt = Date.now();
   const workspaceRoot = getJobWorkspaceRoot(jobId);
   const repoDirName = sanitizeRepoDirName(metadata.owner, metadata.repo);
   const repoPath = getClonedRepoPath(jobId, repoDirName);
 
   await fs.rm(workspaceRoot, { recursive: true, force: true });
   await ensureDir(workspaceRoot);
+  log('info', 'Starting shallow clone', {
+    jobId,
+    cloneUrl: metadata.cloneUrl,
+    ref: metadata.ref,
+    workspaceRoot,
+    repoDirName,
+  });
 
   const clone = await runCommand(
     'git',
@@ -38,6 +47,11 @@ export const cloneRepoShallow = async (
   }
 
   if (metadata.ref && metadata.ref !== metadata.defaultBranch) {
+    log('info', 'Checking out requested non-default ref', {
+      jobId,
+      ref: metadata.ref,
+      defaultBranch: metadata.defaultBranch,
+    });
     const checkout = await runCommand(
       'git',
       ['-C', repoPath, 'checkout', metadata.ref],
@@ -74,6 +88,12 @@ export const cloneRepoShallow = async (
       }
     }
   }
+
+  log('info', 'Shallow clone completed', {
+    jobId,
+    repoPath,
+    durationMs: Date.now() - startedAt,
+  });
 
   const gitDir = path.join(repoPath, '.git');
   try {

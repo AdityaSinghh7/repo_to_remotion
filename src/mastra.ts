@@ -21,7 +21,7 @@ export const createAppContext = async (): Promise<AppContext> => {
   const codexRunner = new CodexCliRunner();
   const codexAnalysisService = new CodexAnalysisService(codexRunner);
   const geminiPromptBuilder = new GeminiPromptBuilder();
-  const screenshotCaptureService = new ScreenshotCaptureService();
+  const screenshotCaptureService = new ScreenshotCaptureService(codexAnalysisService);
   const remotionService = new RemotionService();
 
   const repoToRemotionWorkflow = createRepoToRemotionWorkflow({

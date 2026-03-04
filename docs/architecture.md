@@ -30,7 +30,7 @@ flowchart LR
 - Workflow (`src/workflows/repo-to-remotion-workflow.ts`): deterministic step graph and branch handling.
 - Ingestion (`src/ingestion`): GitHub metadata validation and shallow clone.
 - Codex Adapter (`src/analysis`): fresh `codex exec` tasks for structured and markdown outputs.
-- Capture (`src/capture`): command execution + readiness checks + Playwright screenshots + deterministic placeholder fallback.
+- Capture (`src/capture`): command execution + readiness checks + Playwright screenshots + Codex auto-fix retries (max 3 recovery retries).
 - Gemini Builder (`src/agents/gemini-prompt-builder.ts`): one internal prompt synthesis call.
 - Remotion (`src/remotion`): project materialization and MP4 render.
 
@@ -48,3 +48,11 @@ flowchart LR
 - Step lifecycle status tracked per job.
 - Terminal report written to deterministic path.
 - Artifact paths recorded in API-visible manifest.
+- Capture step logs include retry-cycle events:
+  - `capture_attempt_started`
+  - `capture_attempt_failed`
+  - `capture_recovery_plan_received`
+  - `capture_fix_command_started`
+  - `capture_fix_command_completed`
+  - `capture_attempt_succeeded`
+  - `capture_retries_exhausted`

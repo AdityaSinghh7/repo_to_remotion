@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { env } from './config/env.js';
 import { createServer } from './api/server.js';
 import { createAppContext } from './mastra.js';

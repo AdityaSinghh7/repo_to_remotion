@@ -5,6 +5,7 @@ import type { RemotionCodegenOutput } from '../types/contracts.js';
 import { AppError } from '../utils/app-error.js';
 import { runCommand } from '../utils/command-runner.js';
 import { ensureDir } from '../utils/fs.js';
+import { log } from '../utils/logger.js';
 import { getRenderedMp4Path, getRemotionProjectPath } from '../utils/paths.js';
 
 const resolveSafeRelativePath = (root: string, relative: string): string => {
@@ -25,9 +26,17 @@ const resolveSafeRelativePath = (root: string, relative: string): string => {
 export class RemotionService {
   public async readPinnedDocs(): Promise<string> {
     const docsPath = path.resolve(env.remotionDocsPath);
+    log('debug', 'Reading pinned Remotion docs', {
+      docsPath,
+    });
 
     try {
-      return await fs.readFile(docsPath, 'utf-8');
+      const docs = await fs.readFile(docsPath, 'utf-8');
+      log('debug', 'Pinned Remotion docs loaded', {
+        docsPath,
+        chars: docs.length,
+      });
+      return docs;
     } catch {
       throw new AppError('INTERNAL_ERROR', 'Pinned Remotion docs file not found', {
         docsPath,
@@ -39,7 +48,15 @@ export class RemotionService {
     jobId: string,
     codegenOutput: RemotionCodegenOutput,
   ): Promise<{ projectPath: string; entryFile: string; compositionId: string }> {
+    const startedAt = Date.now();
     const projectPath = getRemotionProjectPath(jobId);
+    log('info', 'Materializing Remotion project files', {
+      jobId,
+      projectPath,
+      fileCount: codegenOutput.files.length,
+      entryFile: codegenOutput.entryFile,
+      compositionId: codegenOutput.compositionId,
+    });
 
     await fs.rm(projectPath, { recursive: true, force: true });
     await ensureDir(projectPath);
@@ -59,6 +76,12 @@ export class RemotionService {
       });
     }
 
+    log('info', 'Remotion project materialization complete', {
+      jobId,
+      projectPath,
+      durationMs: Date.now() - startedAt,
+    });
+
     return {
       projectPath,
       entryFile: codegenOutput.entryFile,
@@ -71,7 +94,16 @@ export class RemotionService {
     entryFile: string;
     compositionId: string;
   }): Promise<string> {
+    const startedAt = Date.now();
     const outputPath = getRenderedMp4Path(jobId);
+    log('info', 'Starting Remotion render', {
+      jobId,
+      projectPath: input.projectPath,
+      entryFile: input.entryFile,
+      compositionId: input.compositionId,
+      outputPath,
+    });
+
     const render = await runCommand(
       'npx',
       ['remotion', 'render', input.entryFile, input.compositionId, outputPath],
@@ -99,6 +131,12 @@ export class RemotionService {
         message: error instanceof Error ? error.message : String(error),
       });
     }
+
+    log('info', 'Remotion render finished', {
+      jobId,
+      outputPath,
+      durationMs: Date.now() - startedAt,
+    });
 
     return outputPath;
   }

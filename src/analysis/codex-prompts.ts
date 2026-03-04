@@ -58,6 +58,55 @@ Constraints:
 - Keep commands compatible with Linux/macOS shells.
 `;
 
+export const buildCaptureRecoveryPrompt = (input: {
+  installCommand: string | null;
+  startCommand: string;
+  failure: {
+    phase: string;
+    message: string;
+    command?: string | null;
+    exitCode?: number | null;
+    stdout?: string | null;
+    stderr?: string | null;
+    attempt: number;
+  };
+  priorAttempts: Array<{
+    attempt: number;
+    result: 'success' | 'failed';
+    phase?: string;
+    message?: string;
+    fixCommandsApplied: string[];
+  }>;
+}): string => `
+You are repairing frontend startup for automated Playwright capture.
+The repository is already cloned locally. Work from repo root.
+
+Current commands:
+- installCommand: ${input.installCommand ?? 'null'}
+- startCommand: ${input.startCommand}
+
+Latest failure (exact):
+${JSON.stringify(input.failure, null, 2)}
+
+Prior attempts summary:
+${JSON.stringify(input.priorAttempts, null, 2)}
+
+Return strict JSON only with schema:
+{
+  "fixCommands": string[],
+  "updatedInstallCommand": string | null | undefined,
+  "updatedStartCommand": string | undefined
+}
+
+Rules:
+- Provide deterministic, non-interactive shell commands.
+- Do not use sudo.
+- Keep commands scoped to this repository.
+- Prefer minimal commands that directly address the failure.
+- If command revision is needed, provide updatedInstallCommand and/or updatedStartCommand.
+- No markdown, no explanation.
+`;
+
 export const buildRemotionCodegenPrompt = (input: {
   remotionPrompt: string;
   remotionDocs: string;

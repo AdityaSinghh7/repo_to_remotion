@@ -24,6 +24,7 @@ import {
 } from '../types/contracts.js';
 import { AppError, asAppError } from '../utils/app-error.js';
 import { ensureDir, writeJsonFile } from '../utils/fs.js';
+import { log } from '../utils/logger.js';
 import {
   getBestDemoFilePath,
   getPurposeFilePath,
@@ -86,6 +87,10 @@ const markSkippedIfStopped = (
 ): boolean => {
   if (inputData.status === 'stopped_no_frontend') {
     services.jobStore.markStepSkipped(inputData.jobId, stepName);
+    log('info', 'Skipping step because workflow is already stopped_no_frontend', {
+      jobId: inputData.jobId,
+      stepName,
+    });
     return true;
   }
 
@@ -118,19 +123,42 @@ const makeTrackedStep = <TInput extends z.ZodTypeAny, TOutput extends z.ZodTypeA
     outputSchema: config.outputSchema,
     execute: async ({ inputData }) => {
       const jobId = (inputData as { jobId: string }).jobId;
+      const startedAt = Date.now();
 
       services.jobStore.markStepRunning(jobId, config.id);
+      log('info', 'Workflow step started', {
+        jobId,
+        step: config.id,
+      });
 
       try {
         const output = await config.execute(inputData);
         const statusAfterExecute = services.jobStore.getStepStatus(jobId, config.id);
         if (statusAfterExecute !== 'skipped') {
           services.jobStore.markStepSuccess(jobId, config.id, output);
+          log('info', 'Workflow step succeeded', {
+            jobId,
+            step: config.id,
+            durationMs: Date.now() - startedAt,
+          });
+        } else {
+          log('info', 'Workflow step marked skipped', {
+            jobId,
+            step: config.id,
+            durationMs: Date.now() - startedAt,
+          });
         }
         return output;
       } catch (error) {
         const appError = asAppError(error);
         services.jobStore.markStepError(jobId, config.id, appError.code, appError.detail ?? appError.message);
+        log('error', 'Workflow step failed', {
+          jobId,
+          step: config.id,
+          durationMs: Date.now() - startedAt,
+          errorCode: appError.code,
+          detail: appError.detail ?? appError.message,
+        });
         throw appError;
       }
     },
@@ -145,6 +173,14 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
     outputSchema: workflowContextSchema,
     execute: async (inputData) => {
       const metadata = await validatePublicGithubRepo(inputData.repoUrl, inputData.ref);
+      log('info', 'Validated public GitHub repository metadata', {
+        jobId: inputData.jobId,
+        repoUrl: inputData.repoUrl,
+        owner: metadata.owner,
+        repo: metadata.repo,
+        defaultBranch: metadata.defaultBranch,
+        requestedRef: inputData.ref ?? null,
+      });
 
       services.jobStore.setJobStatus(inputData.jobId, 'running');
 
@@ -169,6 +205,11 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
       }
 
       const clone = await cloneRepoShallow(inputData.jobId, inputData.metadata);
+      log('info', 'Repository clone complete', {
+        jobId: inputData.jobId,
+        repoPath: clone.repoPath,
+        ref: clone.ref,
+      });
 
       return {
         ...inputData,
@@ -187,6 +228,11 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
       }
 
       const frontend = await services.codexAnalysisService.detectFrontend(inputData.clone.repoPath);
+      log('info', 'Frontend detection completed', {
+        jobId: inputData.jobId,
+        hasFrontend: frontend.hasFrontend,
+        evidenceCount: frontend.evidence.length,
+      });
 
       return {
         ...inputData,
@@ -201,6 +247,9 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
     outputSchema: workflowContextSchema,
     execute: async (inputData) => {
       const summary = 'No frontend code found for demo creation.';
+      log('info', 'No frontend detected, entering early-stop branch', {
+        jobId: inputData.jobId,
+      });
 
       services.jobStore.setJobStatus(inputData.jobId, 'stopped_no_frontend', {
         stopReason: 'NO_FRONTEND_FOUND',
@@ -240,6 +289,10 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
       const purposePath = getPurposeFilePath(inputData.jobId);
       await ensureDir(path.dirname(purposePath));
       await fs.writeFile(purposePath, `${purposeMarkdown.trim()}\n`, 'utf-8');
+      log('info', 'Purpose analysis written', {
+        jobId: inputData.jobId,
+        purposePath,
+      });
 
       services.jobStore.setArtifacts(inputData.jobId, {
         purposeMd: purposePath,
@@ -274,6 +327,10 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
       const bestDemoPath = getBestDemoFilePath(inputData.jobId);
       await ensureDir(path.dirname(bestDemoPath));
       await fs.writeFile(bestDemoPath, `${bestDemoMarkdown.trim()}\n`, 'utf-8');
+      log('info', 'Best demo markdown written', {
+        jobId: inputData.jobId,
+        bestDemoPath,
+      });
 
       services.jobStore.setArtifacts(inputData.jobId, {
         bestDemoMd: bestDemoPath,
@@ -305,25 +362,28 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
       }
 
       const capturePlan = await services.codexAnalysisService.planCapture(inputData.clone.repoPath);
+      log('info', 'Capture plan generated', {
+        jobId: inputData.jobId,
+        port: capturePlan.port,
+        screenshotRoutes: capturePlan.screenshotRoutes,
+        hasInstallCommand: Boolean(capturePlan.installCommand),
+      });
 
       const screenshots = await services.screenshotCaptureService.runPlan({
         jobId: inputData.jobId,
         repoPath: inputData.clone.repoPath,
         capturePlan,
       });
+      log('info', 'Screenshot capture completed', {
+        jobId: inputData.jobId,
+        screenshotCount: screenshots.screenshotNames.length,
+        attemptCount: screenshots.attemptCount,
+        screenshotDir: screenshots.screenshotDir,
+      });
 
       services.jobStore.setArtifacts(inputData.jobId, {
         screenshotsDir: screenshots.screenshotDir,
       });
-
-      const startupWarning = screenshots.startupFailed
-        ? {
-            captureWarning: {
-              code: 'FRONTEND_START_FAILED',
-              reason: screenshots.startupFailureReason ?? 'Unknown startup failure',
-            },
-          }
-        : {};
 
       return {
         ...inputData,
@@ -333,7 +393,6 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
           ...inputData.artifacts,
           screenshotsDir: screenshots.screenshotDir,
         },
-        ...startupWarning,
       };
     },
   });
@@ -358,9 +417,17 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
         remotionDocs,
         screenshotNames: inputData.screenshots.screenshotNames,
       });
+      log('info', 'Gemini remotion prompt built', {
+        jobId: inputData.jobId,
+        screenshotCount: remotionPrompt.screenshotNames.length,
+      });
 
       const remotionPromptPath = getRemotionPromptJsonPath(inputData.jobId);
       await writeJsonFile(remotionPromptPath, remotionPrompt);
+      log('info', 'Remotion prompt JSON written', {
+        jobId: inputData.jobId,
+        remotionPromptPath,
+      });
 
       services.jobStore.setArtifacts(inputData.jobId, {
         remotionPromptJson: remotionPromptPath,
@@ -396,11 +463,21 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
         inputData.remotionPrompt.remotionCodegenPrompt,
         remotionDocs,
       );
+      log('info', 'Codex remotion codegen completed', {
+        jobId: inputData.jobId,
+        fileCount: remotionCodegen.files.length,
+        compositionId: remotionCodegen.compositionId,
+        entryFile: remotionCodegen.entryFile,
+      });
 
       const { projectPath } = await services.remotionService.materializeProject(
         inputData.jobId,
         remotionCodegen,
       );
+      log('info', 'Remotion project materialized', {
+        jobId: inputData.jobId,
+        projectPath,
+      });
 
       services.jobStore.setArtifacts(inputData.jobId, {
         remotionProjectPath: projectPath,
@@ -436,6 +513,10 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
         entryFile: inputData.remotionCodegen.entryFile,
         compositionId: inputData.remotionCodegen.compositionId,
       });
+      log('info', 'Remotion render completed', {
+        jobId: inputData.jobId,
+        mp4Path,
+      });
 
       services.jobStore.setArtifacts(inputData.jobId, {
         mp4Path,
@@ -468,6 +549,10 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
 
       const latest = services.jobStore.serializeForApi(inputData.jobId);
       const reportPath = await writeJobReport(latest);
+      log('info', 'PublishArtifacts generated report', {
+        jobId: inputData.jobId,
+        reportPath,
+      });
 
       services.jobStore.setArtifacts(inputData.jobId, {
         ...inputData.artifacts,
@@ -502,11 +587,17 @@ export const createRepoToRemotionWorkflow = (services: Services) => {
     .map(async ({ getStepResult }) => {
       const continued = getStepResult(frontendContinueStep) as WorkflowContext | undefined;
       if (continued) {
+        log('info', 'Workflow branch selected: frontendContinue', {
+          jobId: continued.jobId,
+        });
         return continued;
       }
 
       const stopped = getStepResult(noFrontendStopStep) as WorkflowContext | undefined;
       if (stopped) {
+        log('info', 'Workflow branch selected: noFrontendStop', {
+          jobId: stopped.jobId,
+        });
         return stopped;
       }
 

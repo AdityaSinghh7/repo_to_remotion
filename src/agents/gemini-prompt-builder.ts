@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { remotionPromptOutputSchema, type RemotionPromptOutput } from '../types/contracts.js';
 import { AppError } from '../utils/app-error.js';
 import { extractJsonObject } from '../utils/json.js';
+import { log } from '../utils/logger.js';
 
 const SYSTEM_INSTRUCTIONS = `
 You generate deterministic, implementation-grade prompts for coding agents.
@@ -65,6 +66,8 @@ export class GeminiPromptBuilder {
     remotionDocs: string;
     screenshotNames: string[];
   }): Promise<RemotionPromptOutput> {
+    const startedAt = Date.now();
+
     const prompt = `
 Create a very detailed remotion code-writing prompt and screenshot mapping.
 
@@ -96,6 +99,11 @@ ${JSON.stringify(input.screenshotNames, null, 2)}
     let rawResponse: unknown;
 
     try {
+      log('info', 'Calling Gemini prompt builder', {
+        screenshotCount: input.screenshotNames.length,
+        purposeChars: input.purposeMarkdown.length,
+        bestDemoChars: input.bestDemoMarkdown.length,
+      });
       rawResponse = await this.agent.generate(prompt);
     } catch (error) {
       throw new AppError('ANALYSIS_FAILED', 'Gemini prompt builder call failed', {
@@ -104,6 +112,10 @@ ${JSON.stringify(input.screenshotNames, null, 2)}
     }
 
     const text = extractResponseText(rawResponse);
+    log('debug', 'Gemini prompt builder returned text', {
+      outputChars: text.length,
+      durationMs: Date.now() - startedAt,
+    });
 
     try {
       const parsed = extractJsonObject<unknown>(text);
@@ -111,6 +123,12 @@ ${JSON.stringify(input.screenshotNames, null, 2)}
       if (!validated.success) {
         throw validated.error;
       }
+
+      log('info', 'Gemini prompt builder output validated', {
+        screenshotCount: validated.data.screenshotNames.length,
+        durationMs: Date.now() - startedAt,
+      });
+
       return validated.data;
     } catch (error) {
       throw new AppError('ANALYSIS_FAILED', 'Gemini output parsing failed', {

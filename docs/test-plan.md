@@ -25,10 +25,16 @@ Validate deterministic behavior for ingestion, frontend gating, structured parsi
 - max cap behavior.
 - zero-count fallback behavior.
 
+5. Startup recovery validation
+- recovery-plan schema acceptance/rejection.
+- startup failure phase schema validation.
+- recovery command safety guard checks (`sudo`, repo escape).
+
 ## 3. Planned Integration Tests
 - No-frontend branch returns `stopped_no_frontend` and writes report.
 - Frontend path reaches render with full artifact manifest.
-- Frontend startup failure preserves flow with placeholders and render attempt.
+- Frontend startup failure triggers recovery planner + fix commands and succeeds on retry.
+- Exhausted recovery retries end the workflow with `FRONTEND_START_FAILED` and detailed attempts in `errorDetail`.
 - Gemini malformed output maps to `ANALYSIS_FAILED` deterministically.
 
 ## 4. Planned End-to-End Tests
@@ -44,3 +50,4 @@ Validate deterministic behavior for ingestion, frontend gating, structured parsi
 - False frontend branch skips downstream computational steps.
 - Success branch publishes `report.json` and `demo.mp4` paths.
 - Error codes map to documented taxonomy without raw exception leaks.
+- Capture startup/capture failures do not use placeholder screenshots.

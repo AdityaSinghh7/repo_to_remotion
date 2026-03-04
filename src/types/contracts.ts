@@ -125,11 +125,62 @@ export const capturePlanSchema = z.object({
 
 export type CapturePlan = z.infer<typeof capturePlanSchema>;
 
+export const captureFailurePhaseSchema = z.enum([
+  'install',
+  'start_process',
+  'readiness_probe',
+  'screenshot_capture',
+  'recovery_fix',
+]);
+
+export type CaptureFailurePhase = z.infer<typeof captureFailurePhaseSchema>;
+
+export const captureStartupFailureSchema = z.object({
+  phase: captureFailurePhaseSchema,
+  message: z.string().min(1),
+  command: z.string().nullable().optional(),
+  exitCode: z.number().int().nullable().optional(),
+  stdout: z.string().nullable().optional(),
+  stderr: z.string().nullable().optional(),
+  attempt: z.number().int().min(1),
+});
+
+export type CaptureStartupFailure = z.infer<typeof captureStartupFailureSchema>;
+
+export const captureRecoveryPlanSchema = z
+  .object({
+    fixCommands: z.array(z.string().min(1)).max(12),
+    updatedInstallCommand: z.string().nullable().optional(),
+    updatedStartCommand: z.string().min(1).optional(),
+  })
+  .refine(
+    (value) =>
+      value.fixCommands.length > 0 ||
+      value.updatedInstallCommand !== undefined ||
+      value.updatedStartCommand !== undefined,
+    {
+      message: 'Recovery plan must include fixCommands or command revisions',
+    },
+  );
+
+export type CaptureRecoveryPlan = z.infer<typeof captureRecoveryPlanSchema>;
+
+export const captureAttemptRecordSchema = z.object({
+  attempt: z.number().int().min(1),
+  installCommand: z.string().nullable(),
+  startCommand: z.string(),
+  result: z.enum(['success', 'failed']),
+  failure: captureStartupFailureSchema.optional(),
+  fixCommandsApplied: z.array(z.string()).default([]),
+});
+
+export type CaptureAttemptRecord = z.infer<typeof captureAttemptRecordSchema>;
+
 export const screenshotManifestSchema = z.object({
   screenshotDir: z.string(),
   screenshotNames: z.array(z.string()).min(1),
-  startupFailed: z.boolean(),
-  startupFailureReason: z.string().nullable().optional(),
+  attemptCount: z.number().int().min(1),
+  attempts: z.array(captureAttemptRecordSchema).min(1),
 });
 
 export type ScreenshotManifest = z.infer<typeof screenshotManifestSchema>;

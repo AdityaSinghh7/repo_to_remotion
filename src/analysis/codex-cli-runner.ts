@@ -6,6 +6,7 @@ import { env } from '../config/env.js';
 import { AppError } from '../utils/app-error.js';
 import { runCommand } from '../utils/command-runner.js';
 import { extractJsonObject } from '../utils/json.js';
+import { log } from '../utils/logger.js';
 
 export type CodexRunOptions = {
   cwd: string;
@@ -17,11 +18,14 @@ export type CodexRunOptions = {
 export class CodexCliRunner {
   public async runText(options: CodexRunOptions): Promise<string> {
     const outputFile = await this.createOutputFile();
+    const startedAt = Date.now();
 
     const args = [
       'exec',
       '-m',
       env.codexModel,
+      '-c',
+      'model_reasoning_effort="low"',
       '--json',
       '--output-last-message',
       outputFile,
@@ -32,6 +36,13 @@ export class CodexCliRunner {
     const result = await runCommand('codex', args, {
       cwd: options.cwd,
       timeoutMs: options.timeoutMs ?? env.codexTimeoutMs,
+    });
+
+    log('info', 'Codex CLI call finished', {
+      cwd: options.cwd,
+      promptChars: options.prompt.length,
+      exitCode: result.exitCode,
+      durationMs: Date.now() - startedAt,
     });
 
     const message = await fs.readFile(outputFile, 'utf-8').catch(() => '');
@@ -51,6 +62,11 @@ export class CodexCliRunner {
         stdout: result.stdout,
       });
     }
+
+    log('debug', 'Codex CLI produced non-empty output', {
+      cwd: options.cwd,
+      outputChars: trimmed.length,
+    });
 
     return trimmed;
   }

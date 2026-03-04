@@ -24,6 +24,12 @@ export const createServer = (context: AppContext) => {
 
   app.post('/v1/demo-jobs', (request, response, next) => {
     try {
+      log('info', 'Received create demo job request', {
+        path: '/v1/demo-jobs',
+        hasIdempotencyKey: Boolean(request.header('Idempotency-Key')),
+        body: request.body,
+      });
+
       const parsed = createDemoJobRequestSchema.safeParse(request.body);
       if (!parsed.success) {
         throw new AppError('INVALID_REQUEST', 'Invalid request payload', {
@@ -44,6 +50,11 @@ export const createServer = (context: AppContext) => {
         }
 
         if (resolution.kind === 'replay') {
+          log('info', 'Replaying existing job for idempotency key', {
+            idempotencyKey,
+            jobId: resolution.job.jobId,
+            status: resolution.job.status,
+          });
           response.status(202).json({
             jobId: resolution.job.jobId,
             status: resolution.job.status,
@@ -62,6 +73,12 @@ export const createServer = (context: AppContext) => {
       if (idempotencyKey) {
         context.jobStore.registerIdempotency(idempotencyKey, payload, jobId);
       }
+
+      log('info', 'Created new demo job', {
+        jobId,
+        repoUrl: payload.repoUrl,
+        ref: payload.ref ?? null,
+      });
 
       context.workflowRunner.start({
         jobId,
@@ -85,6 +102,12 @@ export const createServer = (context: AppContext) => {
         throw new AppError('JOB_NOT_FOUND', 'No demo job exists for the requested id');
       }
 
+      log('debug', 'Fetched job status', {
+        jobId: job.jobId,
+        status: job.status,
+        updatedAt: job.updatedAt,
+      });
+
       response.status(200).json({
         jobId: job.jobId,
         status: job.status,
@@ -106,6 +129,11 @@ export const createServer = (context: AppContext) => {
       if (!job) {
         throw new AppError('JOB_NOT_FOUND', 'No demo job exists for the requested id');
       }
+
+      log('debug', 'Fetched job artifacts', {
+        jobId: job.jobId,
+        status: job.status,
+      });
 
       response.status(200).json({
         jobId: job.jobId,

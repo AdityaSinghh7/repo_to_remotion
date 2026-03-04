@@ -1,14 +1,19 @@
 import {
   capturePlanSchema,
+  captureRecoveryPlanSchema,
   frontendDetectionResultSchema,
   remotionCodegenOutputSchema,
+  type CaptureAttemptRecord,
   type CapturePlan,
+  type CaptureRecoveryPlan,
+  type CaptureStartupFailure,
   type FrontendDetectionResult,
   type RemotionCodegenOutput,
 } from '../types/contracts.js';
 import {
   buildBestDemoPrompt,
   buildCapturePlanPrompt,
+  buildCaptureRecoveryPrompt,
   buildFrontendDetectionPrompt,
   buildPurposePrompt,
   buildRemotionCodegenPrompt,
@@ -45,6 +50,31 @@ export class CodexAnalysisService {
       cwd: repoPath,
       prompt: buildCapturePlanPrompt(),
       schema: capturePlanSchema,
+    });
+  }
+
+  public async planCaptureRecovery(input: {
+    repoPath: string;
+    installCommand: string | null;
+    startCommand: string;
+    failure: CaptureStartupFailure;
+    priorAttempts: CaptureAttemptRecord[];
+  }): Promise<CaptureRecoveryPlan> {
+    return this.runner.runJson({
+      cwd: input.repoPath,
+      prompt: buildCaptureRecoveryPrompt({
+        installCommand: input.installCommand,
+        startCommand: input.startCommand,
+        failure: input.failure,
+        priorAttempts: input.priorAttempts.map((attempt) => ({
+          attempt: attempt.attempt,
+          result: attempt.result,
+          phase: attempt.failure?.phase,
+          message: attempt.failure?.message,
+          fixCommandsApplied: attempt.fixCommandsApplied,
+        })),
+      }),
+      schema: captureRecoveryPlanSchema,
     });
   }
 

@@ -23,5 +23,18 @@ Service starts on `http://localhost:8787` by default.
 - `GET /v1/demo-jobs/:jobId`
 - `GET /v1/demo-jobs/:jobId/artifacts`
 
+## Endpoint Test Script
+Run end-to-end API submission + polling against a GitHub URL:
+
+```bash
+npm run test:endpoint -- --repo-url https://github.com/psf/requests --start-server --expected-status any
+```
+
 ## Environment
 See `.env.example`.
+
+For detailed server logs during workflow runs, set:
+
+```bash
+LOG_LEVEL=debug
+```

@@ -1,5 +1,6 @@
 import { AppError } from '../utils/app-error.js';
 import type { GithubRepoMetadata } from '../types/contracts.js';
+import { log } from '../utils/logger.js';
 
 export type GithubUrlParts = {
   owner: string;
@@ -55,6 +56,13 @@ export const validatePublicGithubRepo = async (
   ref?: string,
 ): Promise<GithubRepoMetadata> => {
   const { owner, repo } = parseGithubRepoUrl(repoUrl);
+  const startedAt = Date.now();
+  log('info', 'Validating GitHub repository metadata', {
+    repoUrl,
+    owner,
+    repo,
+    requestedRef: ref ?? null,
+  });
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
     headers: {
@@ -88,6 +96,13 @@ export const validatePublicGithubRepo = async (
   if (payload.private) {
     throw new AppError('REPO_NOT_PUBLIC', 'GitHub repository is private and not supported in v1');
   }
+
+  log('info', 'GitHub repository metadata validated', {
+    owner,
+    repo,
+    defaultBranch: payload.default_branch,
+    durationMs: Date.now() - startedAt,
+  });
 
   return {
     owner,

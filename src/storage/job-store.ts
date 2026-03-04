@@ -11,6 +11,7 @@ import {
 } from '../types/contracts.js';
 import type { ErrorCode } from '../types/errors.js';
 import { ensureDir, writeJsonFile } from '../utils/fs.js';
+import { log } from '../utils/logger.js';
 
 export type JobRecord = {
   jobId: string;
@@ -97,6 +98,11 @@ export class JobStore {
     };
 
     this.jobs.set(record.jobId, record);
+    log('info', 'Job record created', {
+      jobId: record.jobId,
+      repoUrl: record.repoUrl,
+      ref: record.ref ?? null,
+    });
     void this.flush();
     return record;
   }
@@ -161,6 +167,12 @@ export class JobStore {
       job.summary = options.summary;
     }
 
+    log('info', 'Job status updated', {
+      jobId,
+      status,
+      stopReason: options?.stopReason ?? null,
+      summary: options?.summary ?? null,
+    });
     job.updatedAt = new Date().toISOString();
     void this.flush();
   }
@@ -173,6 +185,10 @@ export class JobStore {
     step.durationMs = null;
     step.errorCode = null;
     step.errorDetail = undefined;
+    log('debug', 'Step marked running', {
+      jobId,
+      stepName,
+    });
     this.bump(jobId);
   }
 
@@ -193,6 +209,11 @@ export class JobStore {
       job.summary = options.summary;
     }
 
+    log('debug', 'Step marked success', {
+      jobId,
+      stepName,
+      durationMs: step.durationMs,
+    });
     this.bump(jobId);
   }
 
@@ -208,6 +229,12 @@ export class JobStore {
     step.errorDetail = errorDetail;
     step.finishedAt = new Date().toISOString();
     step.durationMs = this.computeDuration(step.startedAt, step.finishedAt);
+    log('warn', 'Step marked error', {
+      jobId,
+      stepName,
+      errorCode,
+      durationMs: step.durationMs,
+    });
     this.bump(jobId);
   }
 
@@ -217,6 +244,10 @@ export class JobStore {
     step.startedAt = step.startedAt ?? new Date().toISOString();
     step.finishedAt = new Date().toISOString();
     step.durationMs = this.computeDuration(step.startedAt, step.finishedAt);
+    log('debug', 'Step marked skipped', {
+      jobId,
+      stepName,
+    });
     this.bump(jobId);
   }
 
@@ -231,6 +262,10 @@ export class JobStore {
       ...job.artifacts,
       ...patch,
     };
+    log('debug', 'Job artifacts updated', {
+      jobId,
+      patch,
+    });
     this.bump(jobId);
   }
 

@@ -2,6 +2,8 @@
 
 ## Phase 1 Implementation Plan (Implemented)
 
+## Phase 1.1 Startup Recovery (Implemented)
+
 ## 1. Objective
 Deliver a runnable Mastra workflow that accepts a public GitHub repo URL and produces either:
 1. deterministic early stop (`stopped_no_frontend`) when no frontend is found, or
@@ -14,7 +16,7 @@ Deliver a runnable Mastra workflow that accepts a public GitHub repo URL and pro
 - Deterministic validation + clone + frontend gate.
 - Codex CLI (`gpt-5.3-codex`) for repository analysis and code generation.
 - One Gemini call (`google/gemini-3.1-pro-preview`) for remotion prompt synthesis.
-- Playwright screenshot capture with deterministic placeholder fallback.
+- Playwright screenshot capture with Codex-driven startup recovery retries.
 - Remotion project generation and MP4 rendering.
 - Step-level status tracking and artifact reporting.
 
@@ -79,3 +81,12 @@ Per job workspace:
 
 ## 8. Implementation Status
 This repository now contains a runnable Phase 1 framework implementation under `src/` and initial unit tests under `tests/`.
+
+## 9. Phase 1.1 Recovery Semantics
+- `planRunAndCaptureWithCodex` now uses recoverable startup flow:
+1. attempt capture with initial install/start commands,
+2. on failure, send exact structured error to Codex,
+3. apply returned fix commands and optional command revisions,
+4. retry up to 3 recovery retries (4 total attempts).
+- Startup/capture failures no longer continue with placeholder screenshots.
+- On exhaustion, terminal error remains `FRONTEND_START_FAILED` with attempt diagnostics in `errorDetail`.
